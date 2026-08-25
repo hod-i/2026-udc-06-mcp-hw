@@ -23,6 +23,7 @@ import {
   loadCatalog,
   searchProducts,
   findBySku,
+  needsReorder,
   lowStock,
   inventoryValue,
   categories,
@@ -110,14 +111,16 @@ server.registerTool(
         ],
       };
     }
-    const needsReorder = product.stock <= product.reorderLevel;
+    // The `stock <= reorderLevel` boundary is the domain's to define, not the
+    // adapter's — `needsReorder` is the same predicate `lowStock` filters with,
+    // so a single SKU here can never disagree with the list from `low_stock`.
     return {
       content: [
         {
           type: "text",
           text:
             `${line(product)}\n` +
-            (needsReorder
+            (needsReorder(product)
               ? `NEEDS REORDER — stock ${product.stock} is at or below the reorder level ${product.reorderLevel}.`
               : `Stock is healthy — ${product.stock - product.reorderLevel} unit(s) above the reorder level ${product.reorderLevel}.`),
         },
@@ -199,7 +202,8 @@ server.registerResource(
     title: "Catalog summary",
     description:
       "Snapshot of the catalog: product count, categories, total inventory " +
-      "value, and how many items are below their reorder level.",
+      "value, and how many items are at or below their reorder level " +
+      "(the boundary is inclusive — stock equal to the reorder level counts).",
     mimeType: "application/json",
   },
   async (uri) => {

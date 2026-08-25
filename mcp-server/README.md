@@ -2,7 +2,13 @@
 
 Тонкий протокольний адаптер над каталогом з `app/`. Уся доменна логіка
 **імпортована** з `app/dist/index.js` — у сервері не перераховується жодне
-число.
+число і не переписується жодна умова.
+
+Останнє довелось виправляти: `check_stock` спершу мав власний рядок
+`product.stock <= product.reorderLevel`. Числа він давав правильні, але межа
+«low» опинилась у двох місцях — у `lowStock()` і в адаптері. Правило винесено
+в доменну функцію `needsReorder(product)`, яку тепер використовують обидва
+виклики, тож `check_stock` фізично не може розійтися з `low_stock`.
 
 ## SDK
 
@@ -15,10 +21,10 @@
 | Тип | Ім'я / URI | Доменна функція | Коли викликається |
 |---|---|---|---|
 | tool | `search_inventory(query)` | `searchProducts` | пошук за назвою, SKU або категорією (case-insensitive) |
-| tool | `check_stock(sku)` | `findBySku` | один товар за точним SKU + порівняння з reorder level |
+| tool | `check_stock(sku)` | `findBySku` + `needsReorder` | один товар за точним SKU + порівняння з reorder level |
 | tool | `low_stock()` | `lowStock` | усе, що на рівні reorder або нижче, найменший запас першим |
 | tool | `inventory_value()` | `inventoryValue` | загальна вартість запасів: `sum(price × stock)` з округленням до копійок |
-| resource | `inventory://catalog` | `categories`, `inventoryValue`, `lowStock` | зведення: кількість товарів, категорії, загальна вартість, скільки під reorder |
+| resource | `inventory://catalog` | `categories`, `inventoryValue`, `lowStock` | зведення: кількість товарів, категорії, загальна вартість, скільки на рівні reorder або нижче |
 
 **tools** — це дії, які викликає модель; **resource** — контекст, який читає
 хост за URI. Зведення каталогу свідомо зроблено ресурсом: це «ось стан

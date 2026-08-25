@@ -27,11 +27,23 @@ export function findBySku(catalog: Product[], sku: string): Product | undefined 
   return catalog.find((p) => p.sku.toUpperCase() === target);
 }
 
+/**
+ * Does this product need reordering? The boundary is INCLUSIVE: stock equal to
+ * the reorder level already counts as needing a reorder.
+ *
+ * This is the single definition of "low" in the domain. `lowStock` filters with
+ * it, and `mcp-server/` reports on a single SKU with it — do not re-spell the
+ * comparison anywhere else. A `<` where this says `<=` is a silent error: it
+ * returns a plausible answer instead of throwing, and the rows it drops are
+ * exactly those sitting on the boundary.
+ */
+export function needsReorder(product: Product): boolean {
+  return product.stock <= product.reorderLevel;
+}
+
 /** Items at or below their reorder level — the question the AI cannot answer by guessing. */
 export function lowStock(catalog: Product[]): Product[] {
-  return catalog
-    .filter((p) => p.stock <= p.reorderLevel)
-    .sort((a, b) => a.stock - b.stock);
+  return catalog.filter(needsReorder).sort((a, b) => a.stock - b.stock);
 }
 
 export function categories(catalog: Product[]): string[] {

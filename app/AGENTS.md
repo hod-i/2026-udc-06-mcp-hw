@@ -28,6 +28,13 @@ The split is deliberate: pure logic stays trivially testable, and the MCP
 server in `mcp-server/` imports the same functions rather than reimplementing
 them.
 
+That applies to **predicates**, not just to computations. `needsReorder(product)`
+is the one definition of the `stock <= reorderLevel` boundary — `lowStock`
+filters with it and `mcp-server/`'s `check_stock` reports a single SKU with it.
+Do not re-spell that comparison at a call site, even when it is one short line:
+a `<` where the domain says `<=` returns a plausible number instead of throwing,
+and the rows it drops are exactly the ones on the boundary.
+
 ## Conventions
 
 - Named exports only, no default exports.
@@ -57,11 +64,16 @@ rationale, observed tool lists and scope notes in
 | `filesystem` | Read `data/catalog.json` and `src/` together — most changes here need the data and the function side by side (tweak `lowStock`, check the `stock <= reorderLevel` boundary against real rows; add a test, use a real `sku` and its actual price) | `./app` only — not the repo root, not `$HOME` |
 | `memory` | Knowledge graph for the constraints that are not visible in the code: which signatures are frozen and what breaks if they change, which `sku`s the tests already pin, which values are the interesting edge cases | One file, `./.claude/mcp-memory.json`. No repo access |
 | `sequential-thinking` | Step-through for the silent-failure spots — `inventoryValue` rounding, the `<=` boundary in `lowStock`, and the `catalog.ts → index.ts → dist/ → mcp-server/` chain — where a wrong answer looks plausible instead of throwing | None — no filesystem, no network |
+| `catalog` | This project's **own** server (`mcp-server/`, Task B) — serves the catalog over MCP so a client gets the domain definitions (`stock <= reorderLevel`, rounding to cents) without reading `src/` first. Tools `search_inventory(query)`, `check_stock(sku)`, `low_stock()`, `inventory_value()` + resource `inventory://catalog` | Read-only, one file — `data/catalog.json` via `loadCatalog()`. No writes, no network |
 
-All three run over stdio via `npx`, need no tokens, and are pinned to exact
-versions — this server set has changed its tool surface between releases
-(`read_file` is already deprecated in favour of `read_text_file`), and a
-floating `@latest` would let that shift under you between sessions.
+The three public servers run over stdio via `npx`, need no tokens, and are
+pinned to exact versions — this server set has changed its tool surface between
+releases (`read_file` is already deprecated in favour of `read_text_file`), and
+a floating `@latest` would let that shift under you between sessions. `catalog`
+is the exception on both counts: it starts from local code
+(`node ./mcp-server/dist/server.js`, so nothing is fetched from a registry) and
+its version is simply the current commit. It does need a build first —
+`npm run build` here, then in `mcp-server/`, since it imports `app/dist/`.
 
 ### Two things to know before using them
 
@@ -78,7 +90,13 @@ floating `@latest` would let that shift under you between sessions.
   *SHOULD* honour it, not *MUST*) and is deprecated as of revision
   `2026-07-28`. The real boundary is OS permissions.
 
-By contrast, the project's own server in `mcp-server/` is read-only by design:
-it imports the functions from `src/` rather than reimplementing them, and
-exposes no tool that writes, deletes, or makes network calls. Anything that
-mutates the catalog goes through code review, not through a tool call.
+- **`catalog` is the opposite trade-off, and it is worth seeing the contrast.**
+  `filesystem` has a narrow scope but full write rights inside it;
+  `catalog` has read rights only, and declares that machine-readably —
+  every tool ships `readOnlyHint: true`, `destructiveHint: false`,
+  `openWorldHint: false`, so the host sees it before the call. It imports the
+  functions from `src/` rather than reimplementing them, so there is no second
+  place where the `stock <= reorderLevel` boundary could drift from this one.
+  Anything that mutates the catalog goes through code review, not a tool call.
+  Scope answers *where*; the annotations answer *what* — narrowing one says
+  nothing about the other.

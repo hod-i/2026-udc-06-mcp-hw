@@ -3,6 +3,7 @@ export type { Product } from "./catalog.js";
 export {
   searchProducts,
   findBySku,
+  needsReorder,
   lowStock,
   categories,
   inventoryValue,
